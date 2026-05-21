@@ -210,17 +210,26 @@ async function chequear() {
     return;
   }
 
-  // TEST DIRECTO: probar 1 RSS y loguear el resultado crudo
+  // TEST DIRECTO: probar 1 RSS hardcodeado vs uno del array
   try {
-    const testUrl = 'https://www.youtube.com/feeds/videos.xml?channel_id=UCTHaNTsP7hsVgBxARZTuajw';
-    const testRes = await fetch(testUrl, {
-      signal: AbortSignal.timeout(8000),
-      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36' },
+    // 1. URL hardcodeada (sabemos que esta anda en el navegador)
+    const urlHard = 'https://www.youtube.com/feeds/videos.xml?channel_id=UCTHaNTsP7hsVgBxARZTuajw';
+    const resHard = await fetch(urlHard, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
     });
-    const testText = await testRes.text();
-    console.log(`[TEST RSS LUZU] status=${testRes.status} largo=${testText.length} primeros100=${testText.slice(0, 100)}`);
+    console.log(`[TEST HARDCODED] status=${resHard.status} (deberia ser 200)`);
+
+    // 2. URL usando el ID del array (el primer canal = Luzu)
+    const primerCanal = CANALES[0];
+    const urlArray = `https://www.youtube.com/feeds/videos.xml?channel_id=${primerCanal.youtubeId}`;
+    console.log(`[TEST ARRAY] id="${primerCanal.youtubeId}" largo_id=${primerCanal.youtubeId.length}`);
+    console.log(`[TEST ARRAY] URL completa: ${urlArray}`);
+    const resArray = await fetch(urlArray, {
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36' },
+    });
+    console.log(`[TEST ARRAY] status=${resArray.status}`);
   } catch (e) {
-    console.log(`[TEST RSS LUZU] FALLO: ${String(e)}`);
+    console.log(`[TEST] FALLO: ${String(e)}`);
   }
 
   try {
