@@ -4,9 +4,9 @@
 // Cada 5 min chequea los 99 canales (RSS + videos.list)
 // y expone el resultado en una URL para que la app lo lea.
 // ============================================================
- 
+
 const http = require('http');
- 
+
 // --- Los 99 canales ---
 const CANALES = [
   { id: 'luzu', nombre: 'Luzu TV', youtubeId: 'UCTHaNTsP7hsVgBxARZTuajw' },
@@ -109,25 +109,25 @@ const CANALES = [
   { id: 'davoo', nombre: 'Davoo Xeneize', youtubeId: 'UCl3OQ6isZRyNDHjYOhUjYnw' },
   { id: 'coscu', nombre: 'Coscu', youtubeId: 'UCvZ0P9-EmGz6SFUuFiZPXKw' },
 ];
- 
+
 // --- Config ---
 const API_KEY = process.env.YOUTUBE_API_KEY;
 const INTERVALO_MS = 5 * 60 * 1000; // cada 5 minutos
 const PORT = process.env.PORT || 3000;
- 
+
 // Estado en memoria (lo que expone el worker)
 let estado = {
   actualizado: null,
   enVivo: {}, // { youtubeId: { enVivo, videoId, titulo, thumbnail } }
 };
- 
+
 // --- Extraer videoIds del RSS ---
 function extractVideoIds(xml) {
   const matches = xml.match(/<yt:videoId>([^<]+)<\/yt:videoId>/g);
   if (!matches) return [];
   return matches.slice(0, 3).map((m) => m.replace(/<yt:videoId>|<\/yt:videoId>/g, ''));
 }
- 
+
 // --- RSS de un canal ---
 let _logRssCount = 0;
 async function getVideoIds(channelId) {
@@ -160,12 +160,12 @@ async function getVideoIds(channelId) {
     return { channelId, videoIds: [] };
   }
 }
- 
+
 // --- videos.list para confirmar lives (1 unidad por batch de 50) ---
 async function getLiveStatus(videoIds) {
   const liveMap = new Map();
   if (videoIds.length === 0) return liveMap;
- 
+
   const BATCH = 50;
   for (let i = 0; i < videoIds.length; i += BATCH) {
     const batch = videoIds.slice(i, i + BATCH);
@@ -197,17 +197,32 @@ async function getLiveStatus(videoIds) {
   }
   return liveMap;
 }
- 
+
 // --- Ciclo de chequeo completo ---
 async function chequear() {
   const inicio = Date.now();
   console.log(`[${new Date().toISOString()}] Iniciando chequeo de ${CANALES.length} canales...`);
- 
+  console.log(`API_KEY presente: ${API_KEY ? 'SI (' + API_KEY.length + ' chars)' : 'NO!!!'}`);
+  _logRssCount = 0; // resetear para loguear en cada ciclo
+
   if (!API_KEY) {
     console.error('FALTA YOUTUBE_API_KEY. Configurala en Railway.');
     return;
   }
- 
+
+  // TEST DIRECTO: probar 1 RSS y loguear el resultado crudo
+  try {
+    const testUrl = 'https://www.youtube.com/feeds/videos.xml?channel_id=UCTHaNTsP7hsVgBxARZTuajw';
+    const testRes = await fetch(testUrl, {
+      signal: AbortSignal.timeout(8000),
+      headers: { 'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0 Safari/537.36' },
+    });
+    const testText = await testRes.text();
+    console.log(`[TEST RSS LUZU] status=${testRes.status} largo=${testText.length} primeros100=${testText.slice(0, 100)}`);
+  } catch (e) {
+    console.log(`[TEST RSS LUZU] FALLO: ${String(e)}`);
+  }
+
   try {
     // Paso 1: RSS de los 99 (en tandas de 20 para no saturar)
     const rssResults = [];
@@ -217,16 +232,16 @@ async function chequear() {
       const res = await Promise.all(grupo.map((c) => getVideoIds(c.youtubeId)));
       rssResults.push(...res);
     }
- 
+
     // Juntar todos los videoIds
     const todosLosVideoIds = [];
     for (const r of rssResults) {
       for (const vid of r.videoIds) todosLosVideoIds.push(vid);
     }
- 
+
     // Paso 2: confirmar lives
     const liveVideos = await getLiveStatus(todosLosVideoIds);
- 
+
     // Paso 3: armar estado por canal
     const nuevoEnVivo = {};
     let cantEnVivo = 0;
@@ -252,7 +267,7 @@ async function chequear() {
         nuevoEnVivo[canal.youtubeId] = { enVivo: false };
       }
     }
- 
+
     estado = { actualizado: new Date().toISOString(), enVivo: nuevoEnVivo };
     const dur = ((Date.now() - inicio) / 1000).toFixed(1);
     console.log(`[OK] ${cantEnVivo} en vivo de ${CANALES.length}. Duró ${dur}s. VideoIds chequeados: ${todosLosVideoIds.length}`);
@@ -260,12 +275,12 @@ async function chequear() {
     console.error('Error en chequeo:', String(err));
   }
 }
- 
+
 // --- Servidor HTTP que expone el estado ---
 const server = http.createServer((req, res) => {
   res.setHeader('Access-Control-Allow-Origin', '*');
   res.setHeader('Content-Type', 'application/json; charset=utf-8');
- 
+
   if (req.url === '/status' || req.url === '/') {
     res.writeHead(200);
     res.end(JSON.stringify(estado));
@@ -277,8 +292,11 @@ const server = http.createServer((req, res) => {
     res.end(JSON.stringify({ error: 'not found' }));
   }
 });
- 
+
 server.listen(PORT, () => {
+  console.log('========================================');
+  console.log('  WORKER VERSION 2 - CON LOGS RSS');
+  console.log('========================================');
   console.log(`Worker corriendo en puerto ${PORT}`);
   chequear(); // primer chequeo inmediato
   setInterval(chequear, INTERVALO_MS); // y cada 5 min
