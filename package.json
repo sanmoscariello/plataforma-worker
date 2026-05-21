@@ -1,0 +1,12 @@
+{
+  "name": "plataforma-worker",
+  "version": "1.0.0",
+  "description": "Worker de deteccion de lives para Plataforma",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
